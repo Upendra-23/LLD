@@ -1,0 +1,98 @@
+package org.example;
+
+import java.util.Map;
+
+enum PaymentMethod {
+    UPI,
+    CARD
+}
+
+enum UserType {
+    NORMAL,
+    PREMIUM
+}
+
+class PaymentRequest {
+    String cardNo;
+    int expMonth;
+    int expYear;
+    int cvv;
+    String sourceUpi;
+    String targetUpi;
+    UserType userType;
+}
+
+class PaymentTPCard {
+    public void payNormal(String cardNum, int expMonth, int expYear, int cvv, int amount){
+        // does the card payment
+    }
+    public void payPremium(String cardNum, int expMonth, int expYear, int cvv, int amount){
+        // does the card payment
+    }
+}
+
+class PaymentTPUPI {
+    public void pay(String sourceUpi, String targetUpi, int amount){
+        // does the upi payment
+    }
+}
+
+interface IPaymentHandler {
+    public void pay(PaymentRequest paymentRequest, int amount);
+}
+
+class PaymentUPIHandler implements IPaymentHandler {
+    private PaymentTPUPI paymentTPUPI;
+
+    @Override
+    public void pay(PaymentRequest paymentRequest, int amount) {
+        paymentTPUPI.pay(paymentRequest.sourceUpi, paymentRequest.targetUpi, amount);
+    }
+}
+
+interface IPaymentCardUserTypeHandler {
+    public void pay(PaymentRequest paymentRequest, int amount);
+}
+
+class PaymentNormalCardHandler implements IPaymentCardUserTypeHandler {
+    private PaymentTPCard paymentTPCard;
+
+    @Override
+    public void pay(PaymentRequest paymentRequest, int amount) {
+        paymentTPCard.payNormal(paymentRequest.cardNo, paymentRequest.expMonth, paymentRequest.expYear,
+                paymentRequest.cvv, amount);
+    }
+}
+
+class PaymentPremiumCardHandler implements IPaymentCardUserTypeHandler {
+    private PaymentTPCard paymentTPCard;
+
+    @Override
+    public void pay(PaymentRequest paymentRequest, int amount) {
+        paymentTPCard.payPremium(paymentRequest.cardNo, paymentRequest.expMonth, paymentRequest.expYear,
+                paymentRequest.cvv, amount);
+    }
+}
+
+class PaymentCardHandler implements IPaymentHandler {
+    Map<UserType, IPaymentCardUserTypeHandler> userTypeHandlerMap;
+
+    @Override
+    public void pay(PaymentRequest paymentRequest, int amount) {
+        userTypeHandlerMap.get(paymentRequest.userType).pay(paymentRequest, amount);
+    }
+}
+
+class PaymentService {
+    Map<PaymentMethod, IPaymentHandler> paymentHandlerMap;
+
+    public void pay(PaymentMethod paymentMethod, PaymentRequest paymentRequest, int amount){
+        paymentHandlerMap.get(paymentMethod).pay(paymentRequest, amount);
+    }
+}
+
+public class PaymentGateway {
+    public static void main(String[] args) {
+
+    }
+}
