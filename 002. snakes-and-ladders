@@ -1,0 +1,213 @@
+package org.example;
+
+import java.util.List;
+import java.util.Map;
+
+class Dice {
+    int maxFace;
+
+    public int throwDice(){
+        return (int)(Math.random() * 6) + 1;
+    }
+}
+
+interface IGameEntity{
+    public void apply(Player player);
+}
+
+class Snake implements IGameEntity {
+    int mouthPos;
+    int tailPos;
+
+    @Override
+    public void apply(Player player) {
+        if(mouthPos == player.currPos)
+            player.currPos = tailPos;
+    }
+}
+
+class Ladder implements IGameEntity {
+    int bottomPos;
+    int topPos;
+
+    @Override
+    public void apply(Player player) {
+        if(bottomPos == player.currPos)
+            player.currPos = topPos;
+    }
+}
+
+class Coins implements IGameEntity {
+    int coinsPos;
+    int rewardValue;
+    
+    @Override
+    public void apply(Player player) {
+        if(coinsPos == player.currPos)
+            player.collectedCoins += rewardValue;
+    }
+}
+
+enum PlayerType {
+    GOLD,
+    PREMIUM
+}
+
+class Player {
+    String name;
+    int currPos;
+    int collectedCoins;
+    PlayerType playerType;
+
+    public Player(String name){
+        this.name = name;
+        this.collectedCoins = 0;
+    }
+}
+
+class Board {
+    int size;
+    List<IGameEntity> entities;
+
+    public void applySnakesAndLadders(Player player) {
+        for(IGameEntity entity: entities){
+            entity.apply(player);
+        }
+    }
+}
+
+interface INextPlayerPickStrategy {
+    public int getNextPlayerInd(int currPlayerInd, List<Player> players);
+}
+
+class DefaultNextPlayerPickStrategy implements INextPlayerPickStrategy {
+    @Override
+    public int getNextPlayerInd(int currPlayerInd, List<Player> players) {
+        return (currPlayerInd + 1) % players.size();
+    }
+}
+
+class RandomNextPlayerPickStrategy implements INextPlayerPickStrategy {
+    @Override
+    public int getNextPlayerInd(int currPlayerInd, List<Player> players) {
+        return (int)(Math.random() * players.size()) + 1;
+    }
+}
+
+interface IPlayerStartPosStrategy {
+    public void apply(List<Player> players);
+}
+
+class DefaultStartPosStrategy implements IPlayerStartPosStrategy {
+    @Override
+    public void apply(List<Player> players) {
+        for(Player player: players){
+            player.currPos = 0;
+        }
+    }
+}
+
+class TierBasedStartPosStrategy implements IPlayerStartPosStrategy {
+    Map<PlayerType, ITierPlayerHeadStartPos> tierPlayerHeadStartPosMap;
+    
+    @Override
+    public void apply(List<Player> players) {
+        for(Player player: players){
+            tierPlayerHeadStartPosMap.get(player.playerType).apply(player);
+        }
+    }
+}
+
+interface ITierPlayerHeadStartPos {
+    public void apply(Player player);
+}
+
+class GoldPlayerHeadStartPos implements  ITierPlayerHeadStartPos {
+    private int tierGoldHeadStartPos;
+    
+    @Override
+    public void apply(Player player) {
+        player.currPos = tierGoldHeadStartPos;
+    }
+}
+
+class PremiumPlayerHeadStartPos implements  ITierPlayerHeadStartPos {
+    private int tierPremiumHeadStartPos;
+
+    @Override
+    public void apply(Player player) {
+        player.currPos = tierPremiumHeadStartPos;
+    }
+}
+
+interface IPlayerWinningStrategy {
+    boolean isPlayerWon(Player player);
+}
+
+class DefaultWinningStrategy implements IPlayerWinningStrategy {
+    @Override
+    public boolean isPlayerWon(Player player) {
+        return player.currPos >= 100;
+    }
+}
+
+class CoinBasedWinningStrategy implements IPlayerWinningStrategy {
+    @Override
+    public boolean isPlayerWon(Player player) {
+        return player.currPos >= 100 && player.collectedCoins >= 10;
+    }
+}
+
+class Game {
+    Board board;
+    List<Player> players;
+    Dice dice;
+    IPlayerWinningStrategy playerWinningStrategy;
+    INextPlayerPickStrategy nextPlayerPickStrategy;
+    IPlayerStartPosStrategy playerStartPosStrategy;
+    int currPlayerInd;
+
+    public void run(){
+        
+        playerStartPosStrategy.apply(players);
+        
+        while(true){
+            Player player = players.get(currPlayerInd);
+            
+            int diceNum = dice.throwDice();
+            player.currPos += diceNum;
+            board.applySnakesAndLadders(player);
+            
+            if(playerWinningStrategy.isPlayerWon(player)){
+                System.out.println("Player: " + player.name + "Won the Game! with " + player.collectedCoins);
+                return;
+            }
+            currPlayerInd = nextPlayerPickStrategy.getNextPlayerInd(currPlayerInd, players);
+        }
+    }
+}
+
+class SnakedAndLaddersFactory {
+    public static Game createDefaultGame(){
+        // initialize board with size and game entities - snakes and ladders
+        // create 2 players or take input from client
+        // initialize game class with board, dice, players, defaultWinningStrategy, defaultNextPlayerPickStrategy, 
+        // defaultPlayerStartPosStrategy, and who will start first - pos
+        return new Game();
+    }
+    
+    public static Game createCustomGame(){
+        // take inputs from client
+        // initialize board with size and game entities - snakes/ladders/coins
+        // can have 2 or more players
+        // initialize game class with board, dice, players, and custom strategies
+        return new Game();
+    }
+}
+
+public class SnakesAndLaddersV3 {
+    public static void main(String[] args) {
+        Game game = SnakedAndLaddersFactory.createDefaultGame();
+        game.run();
+    }
+}
