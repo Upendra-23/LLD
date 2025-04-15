@@ -1,0 +1,361 @@
+package org.example;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
+class User {
+    String userId;
+    String name;
+    String email;
+    String mobileNumber;
+
+    public User(String userId, String name) {
+    }
+}
+
+enum ExpenseSplitType {
+    EXACT,
+    EQUAL,
+    PERCENT
+}
+
+class Expense {
+    String payeeId;
+    Double totalAmount;
+    List<String> participantIds;
+    List<Double> exactSplitAmount;
+    List<Double> percentSplit;
+    ExpenseSplitType expenseSplitType;
+
+    public Expense(Double totalAmount, String payeeId, List<String> participants, Object o) {
+    }
+}
+
+class UserService {
+    Map<String, User> userMap;
+    
+    public void addUser(String userId, String name){
+        userMap.putIfAbsent(userId, new User(userId, name));
+    }
+    
+    public User getUser(String userId){
+        return userMap.get(userId);
+    }
+}
+
+class SplitShare {
+    String participant;
+    Double participantShare;
+
+    public SplitShare(String participant, Double shareAmount) {
+    }
+}
+
+interface IExpenseSplitStrategy {
+    Boolean doesSupport(ExpenseSplitType expenseSplitType);
+    public List<SplitShare> splitShare(Expense expense);
+}
+
+class EqualExpenseSplitStrategy implements IExpenseSplitStrategy {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.EQUAL);
+    }
+
+    @Override
+    public List<SplitShare> splitShare(Expense expense) {
+        List<SplitShare> splitShareList = new ArrayList<>();
+        Double shareAmount = expense.totalAmount / expense.participantIds.size();
+        for(String participant: expense.participantIds){
+            if(!participant.equals(expense.payeeId))
+                splitShareList.add(new SplitShare(participant, shareAmount));
+        }
+        return splitShareList;
+    }
+}
+
+
+class ExactExpenseSpitStrategy implements IExpenseSplitStrategy {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.EXACT);
+    }
+
+    @Override
+    public List<SplitShare> splitShare(Expense expense) {
+        Double sum = 0.0;
+        for(Double share: expense.exactSplitAmount)
+            sum += share;
+        if(!sum.equals(expense.totalAmount))
+            throw new RuntimeException("Not Valid Split");
+
+        List<SplitShare> splitShareList = new ArrayList<>();
+        for(int i=0;i<expense.participantIds.size();i++){
+            splitShareList.add(new SplitShare(expense.participantIds.get(i), expense.exactSplitAmount.get(i)));
+        }
+        return splitShareList;
+
+    }
+}
+
+class PercentExpenseSplitStrategy implements IExpenseSplitStrategy {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.PERCENT);
+    }
+
+    @Override
+    public List<SplitShare> splitShare(Expense expense) {
+        List<SplitShare> splitShareList = new ArrayList<>();
+        Double totalAmount = expense.totalAmount;
+        for(int i=0;i<expense.participantIds.size();i++){
+            splitShareList.add(new SplitShare(expense.participantIds.get(i), expense.percentSplit.get(i) / 100 * totalAmount));
+        }
+        return splitShareList;
+    }
+}
+
+class ExpenseService {
+    UserService userService;
+    Map<String, Map<String, Double>> balanceMap;
+
+    public void processExpense(Expense expense, List<SplitShare> splitShares) {
+        String payee = expense.payeeId;
+        for(SplitShare splitShare: splitShares){
+            String participant = splitShare.participant;
+            Double share = splitShare.participantShare;
+
+            balanceMap.get(payee).put(participant, balanceMap.get(payee).get(participant) - share);
+            balanceMap.get(participant).put(payee, balanceMap.get(participant).get(payee) + share);
+        }
+    }
+
+    public void showBalance(String userId){
+        boolean noBalance = true;
+        User user = userService.getUser(userId);
+        for(Map.Entry<String, Double> entry: balanceMap.get(userId).entrySet()){
+            if(entry.getValue() > 0){
+                System.out.println(user.name + " ows " + userService.getUser(entry.getKey()) + " : " + entry.getValue());
+                noBalance = false;
+            }
+        }
+        if(noBalance) System.out.println("No balances");
+    }
+
+    public void show(){
+        boolean noBalance = true;
+        for(String user: balanceMap.keySet()){
+            for(Map.Entry<String, Double> entry: balanceMap.get(user).entrySet()){
+                if(entry.getValue() > 0){
+                    System.out.println(userService.getUser(entry.getKey()) + " ows " + userService.getUser(entry.getKey()) + " : " + entry.getValue());
+                    noBalance = false;
+                }
+            }
+        }
+        if(noBalance) System.out.println("No balances");
+    }
+}
+
+class App {
+    UserService userService;
+    ExpenseService expenseService;
+    List<IExpenseSplitStrategy> expenseSplitStrategies;
+    
+    public void addExpense(Expense expense) {
+        List<SplitShare> splitShares = new ArrayList<>();
+        for(IExpenseSplitStrategy splitStrategy: expenseSplitStrategies){
+            if(splitStrategy.doesSupport(expense.expenseSplitType)){
+                splitShares = splitStrategy.splitShare(expense);
+                break;
+            }
+        }
+        expenseService.processExpense(expense, splitShares);
+    }
+
+    public void showBalance(String userId) {
+        expenseService.showBalance(userId);
+    }
+
+    public void show(){
+        expenseService.show();
+    }
+}
+
+class SplitAppFactory {
+    public App getDefaultSplitWiseApp(){
+        // initialize UserService and ExpenseService
+        // provide default List of Split Strategy
+        return new App();
+    }
+    public App getCustomSplitWiseApp(List<IExpenseSplitStrategy> expenseSplitStrategies){
+        // initialize UserService and ExpenseService
+        // use client provided List of Split Strategy
+        return new App();
+    }
+}
+
+interface IExpenseSplitTypeParser {
+    Boolean doesSupport(ExpenseSplitType expenseSplitType);
+    public void parse(int noOfParticipants, List<String> command, Expense expense)
+}
+
+class ExactSplitTypeParser implements IExpenseSplitTypeParser {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.EXACT);
+    }
+
+    @Override
+    public void parse(int noOfParticipants, List<String> command, Expense expense) {
+        List<Double> exactSplitAmount = new ArrayList<>();
+        for(int i=0;i<noOfParticipants;i++){
+            exactSplitAmount.add(Double.parseDouble(command.get(4 + noOfParticipants + i)));
+        }
+        expense.exactSplitAmount = exactSplitAmount;
+    }
+}
+
+class PercentSplitTypeParser implements IExpenseSplitTypeParser {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.PERCENT);
+    }
+
+    @Override
+    public void parse(int noOfParticipants, List<String> command, Expense expense) {
+        List<Double> percentSplit = new ArrayList<>();
+        for(int i=0;i<noOfParticipants;i++){
+            String percent = command.get(4 + noOfParticipants + i);
+            percent = percent.substring(0, percent.length()-1);
+            percentSplit.add(Double.parseDouble(percent));
+        }
+        expense.percentSplit = percentSplit;
+    }
+}
+
+class EqualSplitTypeParse implements IExpenseSplitTypeParser {
+
+    @Override
+    public Boolean doesSupport(ExpenseSplitType expenseSplitType) {
+        return expenseSplitType.equals(ExpenseSplitType.EQUAL);
+    }
+
+    @Override
+    public void parse(int noOfParticipants, List<String> command, Expense expense) {
+        throw new UnsupportedOperationException();
+    }
+}
+
+interface ICommandHandler {
+    Boolean doesSupport(String commandType);
+    public void parseCommand(List<String> command);
+}
+
+class ExpenseCommandHandler implements ICommandHandler {
+    App app;
+    List<IExpenseSplitTypeParser> expenseSplitTypeParsers;
+
+    @Override
+    public Boolean doesSupport(String commandType) {
+        return commandType.equals("EXPENSE");
+    }
+
+    @Override
+    public void parseCommand(List<String> command) {
+        String payeeId = command.get(1);
+        Double totalAmount = Double.parseDouble(command.get(2));
+        Integer noOfParticipants = Integer.parseInt(command.get(3));
+        List<String> participants = new ArrayList<>();
+        for(int i=0;i<noOfParticipants;i++){
+            participants.add(command.get(4+i));
+        }
+        ExpenseSplitType expenseSplitType = ExpenseSplitType.valueOf(command.get(3 + noOfParticipants));
+        Expense expense = new Expense(totalAmount, payeeId, participants, expenseSplitType);
+
+        for(IExpenseSplitTypeParser expenseSplitTypeParser: expenseSplitTypeParsers){
+            if(expenseSplitTypeParser.doesSupport(expenseSplitType))
+                expenseSplitTypeParser.parse(noOfParticipants, command, expense);
+        }
+        app.addExpense(expense);
+    }
+}
+
+interface IShowCommandHandler {
+    Boolean doesSupport(int size);
+    public void parseShowCommand(List<String> command);
+}
+
+class ShowSingleUserBalanceCommandHandler implements IShowCommandHandler {
+    App app;
+
+    @Override
+    public Boolean doesSupport(int size) {
+        return size == 2;
+    }
+
+    @Override
+    public void parseShowCommand(List<String> command) {
+        app.showBalance(command.get(1));
+    }
+}
+
+class ShowAllBalanceCommandHandler implements IShowCommandHandler {
+    App app;
+
+    @Override
+    public Boolean doesSupport(int size) {
+        return size == 1;
+    }
+
+    @Override
+    public void parseShowCommand(List<String> command) {
+        app.show();
+    }
+}
+
+class ShowCommandHandler implements ICommandHandler {
+    List<IShowCommandHandler> showCommandHandlers;
+
+    @Override
+    public Boolean doesSupport(String commandType) {
+        return commandType.equals("SHOW");
+    }
+
+    @Override
+    public void parseCommand(List<String> command) {
+        for(IShowCommandHandler showCommandHandler: showCommandHandlers){
+            if(showCommandHandler.doesSupport(command.size()))
+                showCommandHandler.parseShowCommand(command);
+        }
+    }
+}
+
+class CommandLine {
+    App app;
+    List<ICommandHandler> commandHandlers;
+    String delimiter;
+
+    public void execute(String commandInput) {
+        List<String> command = Arrays.stream(commandInput.split(delimiter)).toList();
+        String commandType = command.get(0);
+
+        for(ICommandHandler commandHandler: commandHandlers){
+            if(commandHandler.doesSupport(commandType)){
+                commandHandler.parseCommand(command);
+            }
+        }
+    }
+}
+
+public class SplitWiseV2 {
+    public static void main(String[] args) {
+
+    }
+}
