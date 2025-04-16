@@ -1,0 +1,170 @@
+package org.example;
+
+
+import java.sql.Connection;
+import java.util.List;
+import java.util.Map;
+
+class User {
+    String id;
+    String mobileNumber;
+    String email;
+    List<String> channels;
+
+    public User(String name, String email, String mobileNumber) {
+    }
+}
+
+enum NotificationType {
+    NEW_MESSAGE,
+    FRIEND_REQUEST,
+    LINKEDIN_PROFILE_VIEW
+}
+
+class SMSChannelData {
+    String body;
+}
+
+class EmailChannelData {
+    String subject;
+    String body;
+    List<String> cc;
+}
+
+interface IUserStorage {
+    public User getUser(String userId);
+    public void addUser(User user);
+}
+
+class MapBasedStorage implements IUserStorage {
+    Map<String, User> userMap;
+
+    @Override
+    public User getUser(String userId) {
+        return userMap.get(userId);
+    }
+
+    @Override
+    public void addUser(User user) {
+        String userId = String.valueOf((int)(Math.random() * 999999) + 1);
+        user.id = userId;
+        userMap.put(userId, user);
+    }
+}
+
+class SqlBasedStorage implements IUserStorage {
+    Connection dbcConnection;
+
+    @Override
+    public User getUser(String userId) {
+        // query to get the User
+    }
+
+    @Override
+    public void addUser(User user) {
+        // query to insert new user
+    }
+}
+
+class UserService {
+    IUserStorage userStorage;
+
+    public User getUser(String userId){
+        return userStorage.getUser(userId);
+    }
+
+    public void addUser(String name, String email, String mobileNumber){
+        userStorage.addUser(new User(name, email, mobileNumber));
+    }
+    
+    public void addSubscription(String userId, String newChannel){
+        User user = userStorage.getUser(userId);
+        user.channels.add(newChannel);
+    }
+    
+    public void removeSubscription(String userId, String channel){
+        User user = userStorage.getUser(userId);
+        user.channels.remove(channel);
+    }
+}
+
+interface INotificationChannel {
+    boolean doesSupport(String channelType);
+    void send(Notification notification);
+}
+
+class SMSNotificationChannel implements INotificationChannel {
+    private TPSmsServiceProvider tpSmsService;
+    private UserService userService;
+    Map<NotificationType, SMSChannelData> smsChannelDataMap;
+
+    @Override
+    public boolean doesSupport(String channelType) {
+        return channelType.equals("SMS");
+    }
+
+    @Override
+    public void send(Notification notification) {
+        String receiverMobileNumber = userService.getUser(notification.receiverId).mobileNumber;
+        tpSmsService.sendNotification(smsChannelDataMap.get(notification.notificationType).body, receiverMobileNumber);
+    }
+}
+
+class EmailNotificationChannel implements INotificationChannel {
+    private TPEmailServiceProvider tpEmailService;
+    private UserService userService;
+    Map<NotificationType, EmailChannelData> emailChannelDataMap;
+
+    @Override
+    public boolean doesSupport(String channelType) {
+        return channelType.equals("Email");
+    }
+
+    @Override
+    public void send(Notification notification) {
+        EmailChannelData emailChannelData = emailChannelDataMap.get(notification.notificationType);
+        String receiverEmail = userService.getUser(notification.receiverId).email;
+        tpEmailService.sendNotification(emailChannelData.subject, emailChannelData.body, receiverEmail);
+    }
+}
+
+class Notification {
+    NotificationType notificationType;
+    String receiverId;
+}
+
+class NotificationController {
+    private UserService userService;
+    List<INotificationChannel> notificationChannels;
+
+    public void sendNotification(Notification notification){
+        List<String> subscribedChannels = userService.getUser(notification.receiverId).channels;
+        
+        for(String channel: subscribedChannels){
+            for(INotificationChannel notificationChannel: notificationChannels){
+                if(notificationChannel.doesSupport(channel)){
+                    notificationChannel.send(notification);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+public class NotificationServiceV2 {
+    public static void main(String[] args) {
+
+    }
+}
+
+class TPSmsServiceProvider {
+    public void sendNotification(String message, String mobileNumber){
+        // sends sms
+    }
+}
+
+class TPEmailServiceProvider {
+    public void sendNotification(String subject, String body, String toEmail){
+        // sends email
+    }
+}
