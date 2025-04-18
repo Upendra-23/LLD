@@ -1,0 +1,208 @@
+package org.example;
+
+import java.util.List;
+import java.util.Map;
+
+class Product {
+    Integer id;
+    String name;
+    Integer quantity;
+    Integer price;
+}
+
+class Inventory {
+    Map<Integer, Product> productMap;
+
+    public boolean isProductInStock(Integer productId) {
+        return productMap.get(productId).quantity > 0;
+    }
+
+    public Product getProduct(Integer productId) {
+        return productMap.getOrDefault(productId, null);
+    }
+
+    public void updateProductQuantity(Integer id) {
+        productMap.get(id).quantity -= 1;
+    }
+}
+
+interface IValidation {
+    public void apply(VendingMachine vendingMachine, Integer productId);
+}
+
+class InStockValidation implements IValidation {
+
+    @Override
+    public void apply(VendingMachine vendingMachine, Integer productId) {
+        if(!vendingMachine.isInStock(productId)){
+            throw new IllegalArgumentException("product is not in stock! Choose a different one");
+        }
+    }
+}
+
+class ProductPriceValidation implements IValidation {
+
+    @Override
+    public void apply(VendingMachine vendingMachine, Integer productId) {
+        if(!vendingMachine.validatePrice(productId)){
+            throw new UnsupportedOperationException("product price is not sufficient");
+        }
+    }
+}
+
+interface IDispenseSteps {
+    public void apply(VendingMachine vendingMachine);
+}
+
+class UpdateInventoryStep implements IDispenseSteps {
+    @Override
+    public void apply(VendingMachine vendingMachine) {
+        vendingMachine.updateInventory();
+    }
+}
+
+class DispenseChangeIfAnyStep implements IDispenseSteps {
+    @Override
+    public void apply(VendingMachine vendingMachine) {
+        vendingMachine.dispenseChangeIfAny();
+    }
+}
+
+class updateVMStateStep implements  IDispenseSteps {
+    @Override
+    public void apply(VendingMachine vendingMachine) {
+        vendingMachine.setVendingMachineState(vendingMachine.vendingMachineStateMap
+                .get(VendingMachineStateType.NO_COIN));
+    }
+}
+
+interface IVendingMachineState {
+    public void insertCoin(Integer amount);
+    public void selectProduct(Integer productId);
+    public void dispenseProduct();
+}
+
+class NoCoinsInsertedState implements IVendingMachineState {
+    private VendingMachine vendingMachine;
+
+    @Override
+    public void insertCoin(Integer amount) {
+        vendingMachine.setTotalAmount(amount);
+        vendingMachine.setVendingMachineState(vendingMachine.vendingMachineStateMap
+                .get(VendingMachineStateType.COIN_INSERTED));
+    }
+
+    @Override
+    public void selectProduct(Integer productId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void dispenseProduct() {
+        throw new UnsupportedOperationException();
+    }
+}
+
+class CoinInsertedState implements IVendingMachineState {
+    private VendingMachine vendingMachine;
+    private List<IValidation> validationList;
+
+    @Override
+    public void insertCoin(Integer amount) {
+        vendingMachine.setTotalAmount(amount);
+    }
+
+    @Override
+    public void selectProduct(Integer productId) {
+        vendingMachine.setSelectedProduct(productId);
+        for(IValidation validation: validationList){
+            validation.apply(vendingMachine, productId);
+        }
+        vendingMachine.setVendingMachineState(vendingMachine.vendingMachineStateMap
+                .get(VendingMachineStateType.DISPENSE));
+    }
+
+    @Override
+    public void dispenseProduct() {
+        throw new UnsupportedOperationException();
+    }
+}
+
+class DispenseState implements IVendingMachineState {
+    private VendingMachine vendingMachine;
+    private List<IDispenseSteps> dispenseSteps;
+
+    @Override
+    public void insertCoin(Integer amount) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void selectProduct(Integer productId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void dispenseProduct() {
+        // product will be dispensed
+        for(IDispenseSteps dispenseStep: dispenseSteps){
+            dispenseStep.apply(vendingMachine);
+        }
+    }
+}
+
+enum VendingMachineStateType {
+    NO_COIN,
+    COIN_INSERTED,
+    DISPENSE
+}
+
+class VendingMachine {
+    Inventory inventory;
+    Integer totalAmount;
+    IVendingMachineState vendingMachineState;
+    Map<VendingMachineStateType, IVendingMachineState> vendingMachineStateMap;
+    Product selectedProduct;
+
+    public VendingMachine(Inventory inventory){
+        this.vendingMachineState = vendingMachineStateMap.get(VendingMachineStateType.NO_COIN);
+        this.totalAmount = 0;
+        this.inventory = inventory;
+    }
+
+    public void setTotalAmount(Integer amount) {
+        this.totalAmount += amount;
+    }
+
+    public void setVendingMachineState(IVendingMachineState vendingMachineState) {
+        this.vendingMachineState = vendingMachineState;
+    }
+
+    public boolean isInStock(Integer productId) {
+        return this.selectedProduct.quantity > 0;
+    }
+
+    public boolean validatePrice(Integer productId) {
+        return this.selectedProduct.price <= totalAmount;
+    }
+
+    public void setSelectedProduct(Integer productId) {
+        this.selectedProduct = inventory.getProduct(productId);
+    }
+
+    public void updateInventory() {
+        this.inventory.updateProductQuantity(selectedProduct.id);
+    }
+
+    public Integer dispenseChangeIfAny() {
+        Integer remainingChange = totalAmount - selectedProduct.price;
+        this.selectedProduct = null;
+        return remainingChange;
+    }
+}
+
+public class VMachine {
+    public static void main(String[] args) {
+
+    }
+}
