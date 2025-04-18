@@ -1,0 +1,200 @@
+package org.example;
+
+import java.util.List;
+import java.util.Optional;
+
+enum BevarageType {
+    COFEE,
+    GINGER_TEA,
+    HOT_MILK
+}
+
+class Inventory {
+    List<Ingredient> ingredients;
+
+    public boolean isSufficient(Ingredient ingredient) {
+        for(Ingredient ing: ingredients){
+            if(ing.name.equals(ingredient.name))
+                return ing.quantity >= ingredient.quantity;
+        }
+        return false;
+    }
+}
+
+class Ingredient {
+    String name;
+    Integer quantity;
+}
+
+class Bevarage {
+    List<Ingredient> requiredIngredients;
+    BevarageType bevarageType;
+}
+
+enum OutletState {
+    FREE,
+    SERVING
+}
+
+class Outlet {
+    OutletState outletState;
+
+    public boolean isFree() {
+        return OutletState.FREE.equals(outletState);
+    }
+
+    public void block() {
+        this.outletState = OutletState.SERVING;
+    }
+
+    public void serve() {
+        // serves the bevarage
+    }
+
+    public void free() {
+        this.outletState = OutletState.FREE;
+    }
+}
+
+interface IOutletPickStrategy {
+    public Outlet pickOutlet(List<Outlet> outlets);
+}
+
+class FirstOutletPickStrategy implements IOutletPickStrategy {
+    @Override
+    public Outlet pickOutlet(List<Outlet> outlets) {
+        return outlets.stream().filter(Outlet::isFree).findFirst().orElse(null);
+    }
+}
+
+class AnyOutletPickStrategy implements IOutletPickStrategy {
+    @Override
+    public Outlet pickOutlet(List<Outlet> outlets) {
+        return outlets.stream().filter(Outlet::isFree).findAny().orElse(null);
+    }
+}
+
+class OutletService {
+    List<Outlet> outlets;
+    IOutletPickStrategy outletPickStrategy;
+
+    public boolean CheckOutletAvailability(){
+        Optional<Outlet> optionalOutlet = outlets.stream().filter(Outlet::isFree).findFirst();
+        return optionalOutlet.isPresent();
+    }
+
+    public Outlet getOutlet(){
+        return this.outletPickStrategy.pickOutlet(outlets);
+    }
+}
+
+interface IValidation {
+    public void apply(CoffeeMachine coffeeMachine);
+}
+
+class OutletValidation implements IValidation {
+    OutletService outletService;
+
+    @Override
+    public void apply(CoffeeMachine coffeeMachine) {
+        if(!outletService.CheckOutletAvailability()){
+            throw new RuntimeException("outlets are not available now");
+        }
+    }
+}
+
+class BevarageValidation implements IValidation {
+
+    @Override
+    public void apply(CoffeeMachine coffeeMachine) {
+        Optional<Bevarage> bev = coffeeMachine.supportedBevarages.stream()
+                .filter(bevarage -> bevarage.bevarageType.equals(coffeeMachine.selectedBevarageType))
+                .findFirst();
+
+        if(bev.isEmpty()) throw new RuntimeException("unsupported bevarage");
+        for(Ingredient ingredient: bev.get().requiredIngredients){
+            if(!coffeeMachine.inventory.isSufficient(ingredient)){
+                throw new RuntimeException("ingredients are not sufficient");
+            }
+        }
+    }
+}
+
+class BatterValidation implements IValidation {
+
+    @Override
+    public void apply(CoffeeMachine coffeeMachine) {
+        if(coffeeMachine.battery.percent < 50){
+            throw new RuntimeException("low on battery");
+        }
+    }
+}
+
+interface IOutletActions {
+    public void apply(Outlet outlet);
+}
+
+class BlockOutlet implements IOutletActions {
+    @Override
+    public void apply(Outlet outlet) {
+        outlet.block();
+    }
+}
+
+class ServeOutlet implements IOutletActions {
+    @Override
+    public void apply(Outlet outlet) {
+        outlet.serve();
+    }
+}
+
+class FreeOutlet implements IOutletActions {
+    @Override
+    public void apply(Outlet outlet) {
+        outlet.free();
+    }
+}
+
+class CoffeeMachine {
+    Inventory inventory;
+    OutletService outletService;
+    List<Bevarage> supportedBevarages;
+    List<IValidation> validations;
+    List<IOutletActions> outletActions;
+    Battery battery;
+
+    BevarageType selectedBevarageType;
+
+    public void prepareBevarage(BevarageType bevarageType){
+        this.setSelectedBevarage(bevarageType);
+
+        for(IValidation validation: validations){
+            validation.apply(this);
+        }
+
+        prepare(bevarageType);
+        Outlet outlet = outletService.getOutlet();
+
+        for(IOutletActions outletStep: outletActions){
+            outletStep.apply(outlet);
+        }
+    }
+
+    public void prepare(BevarageType bevarageType){
+        // preparation
+    }
+
+    private void setSelectedBevarage(BevarageType bevarageType) {
+        this.selectedBevarageType = bevarageType;
+    }
+}
+
+class Battery {
+    Integer percent;
+}
+
+public class CofeeMachineV2 {
+    public static void main(String[] args) {
+
+    }
+}
