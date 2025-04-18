@@ -1,0 +1,234 @@
+package org.example;
+
+
+import java.util.List;
+import java.util.Map;
+
+class User {
+    String userId;
+    String name;
+    String cardNumber;
+}
+
+class Card {
+    String cardNumber;
+    String cardPin;
+    Integer balance;
+}
+
+enum TransactionType {
+    WITHDRAW,
+    DEPOSIT,
+    BALANCE
+}
+
+class CardService {
+    Map<String, Card> cardMap;
+
+    public Card getCard(String cardNumber){
+        return cardMap.getOrDefault(cardNumber, null);
+    }
+}
+
+class WalletService {
+    Integer walletAmount;
+    CardService cardService;
+
+    public Integer withdraw(Integer amount) {
+        walletAmount -= amount;
+        return amount;
+    }
+
+    public Integer deposit(Integer amount) {
+        walletAmount += amount;
+        return amount;
+    }
+
+    public Integer getBalance() {
+        return walletAmount;
+    }
+}
+
+interface ICardDetailsValidation {
+    public void validate(Card card1, Card card2);
+}
+
+class CardNumberValidation implements ICardDetailsValidation {
+    @Override
+    public void validate(Card card1, Card card2) {
+        if(!card1.cardNumber.equals(card2.cardNumber)){
+            throw new RuntimeException("card number is not valid");
+        }
+    }
+}
+
+class PinNumberValidation implements ICardDetailsValidation {
+
+    @Override
+    public void validate(Card card1, Card card2) {
+        if(!card1.cardPin.equals(card2.cardPin)){
+            throw new RuntimeException("incorrect pin");
+        }
+    }
+}
+
+interface ITransaction {
+    public boolean doesSupport(TransactionType type);
+    public Integer handleTransaction(Integer amount);
+}
+
+class WithDrawTransaction implements ITransaction {
+    WalletService walletService;
+    ATMMachine atmMachine;
+
+    @Override
+    public boolean doesSupport(TransactionType type) {
+        return type.equals(TransactionType.WITHDRAW);
+    }
+
+    @Override
+    public Integer handleTransaction(Integer amount) {
+        return walletService.withdraw(amount);
+    }
+}
+
+class DepositTransaction implements ITransaction {
+    WalletService walletService;
+
+    @Override
+    public boolean doesSupport(TransactionType type) {
+        return type.equals(TransactionType.DEPOSIT);
+    }
+
+    @Override
+    public Integer handleTransaction(Integer amount) {
+        return walletService.deposit(amount);
+    }
+}
+
+class BalanceTransaction implements ITransaction {
+    WalletService walletService;
+
+    @Override
+    public boolean doesSupport(TransactionType type) {
+        return type.equals(TransactionType.BALANCE);
+    }
+
+    @Override
+    public Integer handleTransaction(Integer amount) {
+        return walletService.getBalance();
+    }
+}
+
+interface IATMMachineState {
+    public void insertCard(Card card);
+    public void enterTypeAndAmount(TransactionType type, Integer amount);
+    public void removeCard();
+}
+
+class NoCardInsertedState implements IATMMachineState {
+    ATMMachine atmMachine;
+    CardService cardService;
+    List<ICardDetailsValidation> cardDetailsValidations;
+
+    @Override
+    public void insertCard(Card card) {
+        Card c = cardService.getCard(card.cardNumber);
+        if(c == null){
+            throw new RuntimeException("Card is not registered");
+        }
+        for(ICardDetailsValidation validation: cardDetailsValidations){
+            validation.validate(card, c);
+        }
+    }
+
+    @Override
+    public void enterTypeAndAmount(TransactionType type, Integer amount) {
+
+    }
+
+    @Override
+    public void removeCard() {
+
+    }
+}
+
+
+
+class SelectTransactionState implements IATMMachineState {
+    List<ITransaction> transactions;
+
+    @Override
+    public void insertCard(Card card) {
+
+    }
+
+    @Override
+    public void enterTypeAndAmount(TransactionType type, Integer amount) {
+        for(ITransaction transaction: transactions){
+            if(transaction.doesSupport(type)){
+                transaction.handleTransaction(amount);
+            }
+        }
+    }
+
+    @Override
+    public void removeCard() {
+
+    }
+}
+
+class RemoveCardState implements IATMMachineState {
+
+    @Override
+    public void insertCard(Card card) {
+
+    }
+
+    @Override
+    public void enterTypeAndAmount(TransactionType type, Integer amount) {
+
+    }
+
+    @Override
+    public void removeCard() {
+        // hApi to lose the card;
+    }
+}
+
+enum MachineState {
+    NO_CARD,
+    TRANSACTION,
+    REMOVE_CARD,
+}
+
+class ATMMachine {
+    Integer withdrawCash;
+    IATMMachineState machineState;
+    Map<MachineState, IATMMachineState> machineStateMap;
+
+    public void insertCard(Card card){
+        machineState.insertCard(card);
+        machineState = machineStateMap.get(MachineState.TRANSACTION);
+    }
+
+    public void doTransaction(TransactionType type, Integer amount){
+        machineState.enterTypeAndAmount(type, amount);
+        machineState = machineStateMap.get(MachineState.REMOVE_CARD);
+    }
+
+    public void removeCard(){
+        machineState.removeCard();
+        machineState = machineStateMap.get(MachineState.NO_CARD);
+    }
+
+    public void setWithDrawCash(Integer cash) {
+        this.withdrawCash = cash;
+    }
+}
+
+public class ATMMachineV2 {
+    public static void main(String[] args) {
+
+    }
+}
