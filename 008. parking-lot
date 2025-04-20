@@ -1,0 +1,243 @@
+package org.example;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+enum VehicleType {
+    BIKE,
+    CAR,
+    BUS
+}
+
+enum SlotType {
+    SMALL,
+    MEDIUM,
+    LARGE
+}
+
+class Vehicle {
+    String registrationNo;
+    VehicleType vehicleType;
+
+    String ownerId;
+}
+
+class Ticket {
+    String tokenId;
+    Integer slotNo;
+    LocalDateTime issuedAt;
+    String registrationNo;
+    String userId;
+    FareType fareType;
+
+    public Ticket(String token, Integer slotNo, String registrationNo, LocalDateTime issuedAt) {
+    }
+
+    public LocalDateTime getIssuedAt() {
+        return this.issuedAt;
+    }
+}
+
+class Slot {
+    Integer slotNo;
+    SlotType slotType;
+    boolean isAvailable;
+    String registrationNo;
+
+    public boolean getIsAvailable() {
+        return this.isAvailable;
+    }
+
+    public String getRegistrationNo() {
+        return this.registrationNo;
+    }
+
+    public void setRegistrationNumber(String registrationNo) {
+    }
+
+    public Integer getSlotNo() {
+        return this.slotNo;
+    }
+
+    public void setIsAvailable(boolean b) {
+    }
+}
+
+interface ISlotPickingStrategy {
+    public Slot getSlot(List<Slot> slots, VehicleType vehicleType);
+}
+
+class NearestFromEntranceStrategy implements ISlotPickingStrategy {
+    @Override
+    public Slot getSlot(List<Slot> slots, VehicleType vehicleType) {
+        return slots.stream().filter(s -> s.getIsAvailable() && s.slotType.ordinal() >= vehicleType.ordinal())
+                .findFirst().orElse(null);
+    }
+}
+
+class NearestFromExitStrategy implements ISlotPickingStrategy {
+    @Override
+    public Slot getSlot(List<Slot> slots, VehicleType vehicleType) {
+        return slots.stream().filter(s -> s.getIsAvailable() && s.slotType.ordinal() >= vehicleType.ordinal())
+                .reduce((first, second) -> second).orElse(null);
+    }
+}
+
+class ParkingLot {
+    List<Slot> slots;
+    ISlotPickingStrategy slotPickingStrategy;
+
+    public Slot getFreeSlot(VehicleType vehicleType){
+        return slotPickingStrategy.getSlot(slots, vehicleType);
+    }
+
+    public void setSlotFree(Integer slotNo) {
+        slots.stream().filter(s -> s.getSlotNo().equals(slotNo)).findFirst().get().setIsAvailable(false);
+    }
+}
+
+enum FareType {
+    NORMAL,
+    WEEKEND
+}
+
+interface IFareStrategy {
+    public boolean doesSupport(FareType type);
+    public Double calculateFare(Ticket ticket);
+}
+
+class NormalFareStrategy implements IFareStrategy {
+    private double HOUR_CHARGE;
+
+    @Override
+    public boolean doesSupport(FareType type) {
+        return type.equals(FareType.NORMAL);
+    }
+    @Override
+    public Double calculateFare(Ticket ticket) {
+        return Duration.between(ticket.getIssuedAt(), LocalDateTime.now()).toHours() * HOUR_CHARGE;
+    }
+}
+
+class WeekendFareStrategy implements IFareStrategy {
+    private double HOUR_CHARGE;
+
+    @Override
+    public boolean doesSupport(FareType type) {
+        return type.equals(FareType.WEEKEND);
+    }
+    @Override
+    public Double calculateFare(Ticket ticket) {
+        return Duration.between(ticket.getIssuedAt(), LocalDateTime.now()).toMinutes() * HOUR_CHARGE;
+    }
+}
+
+class TicketService {
+    ParkingLot parkingLot;
+    PaymentService paymentService;
+    Map<String, Ticket> ticketMap;
+    List<IFareStrategy> fareStrategies;
+
+    public void parkVehicle(Vehicle vehicle){
+        Slot slot = parkingLot.getFreeSlot(vehicle.vehicleType);
+        if(slot == null){
+            throw new RuntimeException("slots are not available");
+        }
+        slot.setRegistrationNumber(vehicle.registrationNo);
+        slot.setIsAvailable(false);
+        String token = UUID.randomUUID().toString() + vehicle.registrationNo;
+        Ticket ticket = new Ticket(token, slot.getSlotNo(), vehicle.registrationNo, LocalDateTime.now());
+        ticketMap.put(token, ticket);
+    }
+
+    public void unParkVehicle(String token){
+        Ticket ticket = ticketMap.get(token);
+        parkingLot.setSlotFree(ticket.slotNo);
+        Double fare = 0.0;
+        for(IFareStrategy fareStrategy: fareStrategies){
+            if(fareStrategy.doesSupport(ticket.fareType)){
+                fare = fareStrategy.calculateFare(ticket);
+                break;
+            }
+        }
+        ticketMap.remove(token);
+    }
+    
+    public Integer getSlotByRegistrationNo(String registrationNo){
+        for(Ticket ticket: ticketMap.values()){
+            if(ticket.registrationNo.equals(registrationNo))
+                return ticket.slotNo;
+        }
+        return -1;
+    }
+
+    public void payment(PaymentMethod paymentMethod, PaymentRequest paymentRequest, Double amount){
+        paymentService.pay(paymentMethod, paymentRequest, amount);
+    }
+}
+
+enum PaymentMethod {
+    UPI,
+    CARD,
+}
+
+class PaymentRequest {
+    String sourceUpi;
+    String targetUpi;
+    String cardNumber;
+    String expMonth;
+    String expYear;
+    Integer cvv;
+}
+
+interface IPaymentHandler {
+    public void handlePayment(PaymentRequest paymentRequest, double amount);
+}
+
+class UPIPaymentHandler implements IPaymentHandler {
+    TPUPIService tpupiService;
+
+    @Override
+    public void handlePayment(PaymentRequest paymentRequest, double amount) {
+        tpupiService.pay(paymentRequest.sourceUpi, paymentRequest.targetUpi, amount);
+    }
+}
+
+class CardPaymentHandler implements IPaymentHandler {
+    TPCardService tpCardService;
+
+    @Override
+    public void handlePayment(PaymentRequest paymentRequest, double amount) {
+        tpCardService.pay(paymentRequest.cardNumber, paymentRequest.expMonth, paymentRequest.expYear,
+                paymentRequest.cvv, amount);
+    }
+}
+
+class PaymentService {
+    Map<PaymentMethod, IPaymentHandler> paymentHandlerMap;
+    
+    public void pay(PaymentMethod paymentMethod, PaymentRequest paymentRequest, Double amount){
+        paymentHandlerMap.get(paymentMethod).handlePayment(paymentRequest, amount);
+    }
+}
+
+public class ParkingLotV2 {
+    public static void main(String[] args) {
+
+    }
+}
+
+class TPUPIService {
+    public void pay(String sourceUpi, String targetUpi, double amount){
+        
+    }
+}
+
+class TPCardService {
+    public void pay(String cardNumber, String expMonth, String expYear, int cvv, double amount){
+                
+    }
+}
