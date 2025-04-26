@@ -1,0 +1,169 @@
+package org.example;
+
+
+import java.util.Map;
+
+interface IRateLimitingEntity {
+    public String getRateLimitingId();
+    public IRefillStrategy getRefillBucketStrategy();
+}
+
+class User implements IRateLimitingEntity {
+    private String userId;
+    int maxTokens; long refillIntervalSeconds;
+
+    @Override
+    public String getRateLimitingId() {
+        return userId;
+    }
+
+    @Override
+    public IRefillStrategy getRefillBucketStrategy() {
+        return new ConstantRateRefill(maxTokens, refillIntervalSeconds);
+    }
+}
+
+class API implements IRateLimitingEntity {
+    String apiName;
+    int maxTokens; long refillIntervalSeconds;
+
+    @Override
+    public String getRateLimitingId() {
+        return apiName;
+    }
+
+    @Override
+    public IRefillStrategy getRefillBucketStrategy() {
+        return new RateFillForAPi(maxTokens, refillIntervalSeconds);
+    }
+}
+
+class UserPerApi implements IRateLimitingEntity {
+    private User user;
+    private API api;
+    int maxTokens; long refillIntervalSeconds;
+
+    @Override
+    public String getRateLimitingId() {
+        return user.getRateLimitingId() + "-" + api.getRateLimitingId();
+    }
+
+    @Override
+    public IRefillStrategy getRefillBucketStrategy() {
+        return null;
+    }
+}
+
+class Bucket {
+    private int tokens;
+    private long lastRefillTime;
+
+    public Bucket(int maxTokens, long lastRefillTime) {
+        this.tokens = maxTokens;
+        this.lastRefillTime = lastRefillTime;
+    }
+
+    public long getLastRefillTime(){
+        return this.lastRefillTime;
+    }
+
+    public int getToken() {
+        return this.tokens;
+    }
+
+    public void reduceToken() {
+        this.tokens -= 1;
+    }
+
+    public void setTokens(int maxTokens) {
+        this.tokens = maxTokens;
+    }
+
+    public void setLastRefillTime(long currRefillTime) {
+        this.lastRefillTime = lastRefillTime;
+    }
+}
+
+interface IRefillStrategy {
+    public void refillBucket(Bucket bucket);
+}
+
+//10 per 20 seconds
+class ConstantRateRefill implements IRefillStrategy {
+    private int maxTokens;
+    private long refillIntervalSeconds;
+
+    public ConstantRateRefill(int maxTokens, long refillIntervalSeconds) {
+        this.maxTokens = maxTokens;
+        this.refillIntervalSeconds = refillIntervalSeconds;
+    }
+
+    @Override
+    public void refillBucket(Bucket bucket) {
+        long currRefillTime = System.currentTimeMillis();
+        if(currRefillTime - bucket.getLastRefillTime() > 20){
+            bucket.setTokens(maxTokens);
+            bucket.setLastRefillTime(currRefillTime);
+        }
+    }
+}
+
+// 10 per 20 seconds in the morning & 10 per 5 seconds in the evening;
+class RateFillForAPi implements IRefillStrategy {
+    private int maxTokens;
+    private long refillIntervalSeconds;
+
+    public RateFillForAPi(int maxTokens, long refillIntervalSeconds){
+        this.maxTokens = maxTokens;
+        this.refillIntervalSeconds = refillIntervalSeconds;
+    }
+
+    @Override
+    public void refillBucket(Bucket bucket) {
+        long currRefillTime = System.currentTimeMillis();
+        if(isMorning()){
+            if(currRefillTime - bucket.getLastRefillTime() > 20){
+                bucket.setTokens(maxTokens);
+                bucket.setLastRefillTime(currRefillTime);
+            }
+        }
+        else {
+            if(currRefillTime - bucket.getLastRefillTime() > 5){
+                bucket.setTokens(maxTokens);
+                bucket.setLastRefillTime(currRefillTime);
+            }
+        }
+    }
+
+    private boolean isMorning() {
+        return true;
+    }
+}
+
+interface IRateLimiter {
+    public boolean isRequestAllowed(IRateLimitingEntity entity);
+}
+
+class TokenBucketRateLimiter implements IRateLimiter {
+    private Map<String, Bucket> bucketMap;
+
+    @Override
+    public boolean isRequestAllowed(IRateLimitingEntity entity){
+        String entityId = entity.getRateLimitingId();
+        Bucket bucket = bucketMap.get(entityId);
+        IRefillStrategy refillStrategy = entity.getRefillBucketStrategy();
+        refillStrategy.refillBucket(bucket);
+
+        if(bucket.getToken() > 0){
+            bucket.reduceToken();
+            return true;
+        }
+        return false;
+    }
+}
+
+public class RateLimitingSystem {
+    public static void main(String[] args) {
+
+    }
+}
